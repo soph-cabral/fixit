@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Firebase Image Upload</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .upload-form {
+            border: 2px dashed #ccc;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+        .preview-image {
+            max-width: 300px;
+            margin: 10px 0;
+            display: none;
+        }
+        #uploadProgress {
+            display: none;
+            margin: 10px 0;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            margin: 10px 0;
+            padding: 8px;
+        }
+        .submit-btn {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .submit-btn:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Upload</h1>
+    <div class="upload-form">
+        <form id="uploadForm">
+            <div>
+                <label for="imageInput">Select an image:</label>
+                <input type="file" id="imageInput" accept="image/*" required>
+            </div>
+            <img id="preview" class="preview-image" alt="Preview">
+            <div id="uploadProgress">Upload progress: <span id="progressText">0%</span></div>
+            <div>
+                <label for="description">Description:</label>
+                <textarea id="description" placeholder="Describe your image..." required></textarea>
+            </div>
+            <button type="submit" class="submit-btn">Submit</button>
+        </form>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-storage-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+
+    <script>
+        // Your Firebase configuration
+        const firebaseConfig = {
+            // You'll need to replace these with your Firebase project details
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_AUTH_DOMAIN",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_STORAGE_BUCKET",
+            messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+
+        // Get references to Firebase services
+        const storage = firebase.storage();
+        const db = firebase.firestore();
+
+        // Preview image before upload
+        const imageInput = document.getElementById('imageInput');
+        const preview = document.getElementById('preview');
+        const uploadForm = document.getElementById('uploadForm');
+        const uploadProgress = document.getElementById('uploadProgress');
+        const progressText = document.getElementById('progressText');
+
+        imageInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    preview.style.display = 'block';
+                    preview.src = e.target.result;
+                }
+                reader.readAsDataURL(file);
+            }
+        });
+
+        // Handle form submission
+        uploadForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const file = imageInput.files[0];
+            const description = document.getElementById('description').value;
+
+            if (!file) {
+                alert('Please select an image first!');
+                return;
+            }
+
+            // Show upload progress
+            uploadProgress.style.display = 'block';
+
+            // Create a storage reference
+            const storageRef = storage.ref();
+            const fileRef = storageRef.child(`uploads/${Date.now()}_${file.name}`);
+
+            // Upload file
+            const uploadTask = fileRef.put(file);
+
+            uploadTask.on('state_changed', 
+                (snapshot) => {
+                    // Track upload progress
+                    const progress = (snapshot.bytesTransferred / snapshot.totalBytes) * 100;
+                    progressText.textContent = Math.round(progress) + '%';
+                },
+                (error) => {
+                    // Handle errors
+                    console.error('Upload failed:', error);
+                    alert('Upload failed. Please try again.');
+                    uploadProgress.style.display = 'none';
+                },
+                async () => {
+                    // Upload completed successfully
+                    const downloadURL = await fileRef.getDownloadURL();
+                    
+                    // Store metadata in Firestore
+                    await db.collection('uploads').add({
+                        imageUrl: downloadURL,
+                        description: description,
+                        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+                    });
+
+                    alert('Upload completed successfully!');
+                    uploadForm.reset();
+                    preview.style.display = 'none';
+                    uploadProgress.style.display = 'none';
+                }
+            );
+        });
+    </script>
+</body>
+</html>
